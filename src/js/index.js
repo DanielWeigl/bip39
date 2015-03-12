@@ -99,6 +99,7 @@
             Blockr.setCoinSubdomain('dgc');
             DOM.bip44coin.val(3);
         }
+        Blockr.setHttpsEnabled(location.protocol == 'https:');
         setBip44DerivationPath();
     }
     function delayedPhraseChanged() {
