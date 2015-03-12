@@ -5,7 +5,7 @@
     var bip32ExtendedKey = null;
     var network = Bitcoin.networks.bitcoin;
     var addressRowTemplate = $("#address-row-template");
-
+    
     var showIndex = true;
     var showAddress = true;
     var showPrivKey = true;
@@ -40,6 +40,7 @@
     DOM.indexToggle = $(".index-toggle");
     DOM.addressToggle = $(".address-toggle");
     DOM.privateKeyToggle = $(".private-key-toggle");
+    DOM.fetchBalance = $(".fetch-balance");
     DOM.myceliumPath = $("#mycelium-path");
 
     var derivationPath = $(".tab-pane.active .path").val();
@@ -60,44 +61,53 @@
         DOM.indexToggle.on("click", toggleIndexes);
         DOM.addressToggle.on("click", toggleAddresses);
         DOM.privateKeyToggle.on("click", togglePrivateKeys);
+        DOM.fetchBalance.on("click", fetchBalances);
         disableForms();
         hidePending();
         hideValidationError();
+        setNetwork('bitcoin');
     }
 
     // Event handlers
 
     function networkChanged(e) {
         var n = e.target.value;
+        setNetwork(n);
+        delayedPhraseChanged();
+    }
+    
+    function setNetwork(n){
         if (n == "bitcoin") {
             network = Bitcoin.networks.bitcoin;
+            Blockr.setCoinSubdomain('btc');
             DOM.bip44coin.val(0);
             DOM.myceliumPath.val("m/44'/0'/0'/0");
         }
         else if (n == "bitcoin-testnet") {
             network = Bitcoin.networks.testnet;
+            Blockr.setCoinSubdomain('tbtc');
             DOM.bip44coin.val(1);
             DOM.myceliumPath.val("m/44'/1'/0'/0");
         }
         else if (n == "litecoin") {
             network = Bitcoin.networks.litecoin;
+            Blockr.setCoinSubdomain('ltc');
             DOM.bip44coin.val(2);
         }
         else if (n == "dogecoin") {
             network = Bitcoin.networks.dogecoin;
+            Blockr.setCoinSubdomain('dgc');
             DOM.bip44coin.val(3);
         }
         setBip44DerivationPath();
-        delayedPhraseChanged();
     }
-
     function delayedPhraseChanged() {
         hideValidationError();
         showPending();
         if (phraseChangeTimeoutEvent != null) {
             clearTimeout(phraseChangeTimeoutEvent);
         }
-        phraseChangeTimeoutEvent = setTimeout(phraseChanged, 400);
+        phraseChangeTimeoutEvent = setTimeout(phraseChanged, 800);
     }
 
     function phraseChanged() {
@@ -170,7 +180,54 @@
         showPrivKey = !showPrivKey;
         $("td.privkey span").toggleClass("invisible");
     }
+    
+    function fetchBalances(){
+        var addrs = [];
+        DOM.addresses.find('tr').each(function(k,v){
+            var addr = $(v).attr('ref');
+            var fetched = $(v).find('.balance span').text() != "";
+            if (addr && !fetched) {
+                // request limit
+                if (addrs.length < 20){
+                    addrs.push(addr);
+                }
+            }
+        });
 
+        if (addrs.length > 0){
+            Blockr.address.balance(addrs, function(ret){
+                if (ret.status=="success"){
+                    $.each(ret.data, function(k,v){
+                        var row = DOM.addresses.find('tr[ref="' + v.address + '"]');
+                        row.find('td.balance span').text(v.balance);
+                    });
+                }else{
+                    showError("Error while fetching balance: " + ret.message);
+                }
+            });
+            
+            Blockr.address.txs(addrs, function(ret){
+                if (ret.status=="success"){
+                    $.each(ret.data, function(k,v){
+                        var row = DOM.addresses.find('tr[ref="' + v.address + '"]');
+                        var cell = row.find('td.balance span');
+                        cell.text(cell.text() + " [txs=" + v.nb_txs +"]");
+                    });
+                }else{
+                    showError("Error while fetching txs: " + ret.message);
+                }
+            });
+            
+        }
+    }
+
+    function showError(msg){
+        DOM.feedback.text(msg).show();
+        setTimeout(function(){
+            DOM.feedback.hide();
+        }, 2000);
+    }
+    
     // Private methods
 
     function generateRandomPhrase() {
@@ -341,10 +398,12 @@
         var indexCell = row.find(".index span");
         var addressCell = row.find(".address span");
         var privkeyCell = row.find(".privkey span");
+        var balanceCell = row.find(".balance span");
         // Content
         indexCell.text(index);
         addressCell.text(address);
         privkeyCell.text(privkey);
+        row.attr('ref', address);
         // Visibility
         if (!showIndex) {
             indexCell.addClass("invisible");
