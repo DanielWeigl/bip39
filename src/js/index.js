@@ -18,6 +18,7 @@
     DOM.phrase = $(".phrase");
     DOM.passphrase = $(".passphrase");
     DOM.generate = $(".generate");
+    DOM.updateRoot = $(".update-root");
     DOM.rootKey = $(".root-key");
     DOM.extendedPrivKey = $(".extended-priv-key");
     DOM.extendedPubKey = $(".extended-pub-key");
@@ -51,6 +52,7 @@
         DOM.phrase.on("input", delayedPhraseChanged);
         DOM.passphrase.on("input", delayedPhraseChanged);
         DOM.generate.on("click", generateClicked);
+        DOM.updateRoot.on("click", updateRootClicked);
         DOM.more.on("click", showMore);
         DOM.bip32path.on("input", bip32Changed);
         DOM.bip44purpose.on("input", bip44Changed);
@@ -134,6 +136,10 @@
         hidePending();
     }
 
+    function updateRootClicked(){
+        updateRootKey();
+    }
+    
     function generateClicked() {
         clearDisplay();
         showPending();
@@ -145,6 +151,7 @@
             phraseChanged();
         }, 50);
     }
+    
 
     function tabClicked(e) {
         var activePath = $(e.target.getAttribute("href") + " .path");
@@ -262,23 +269,7 @@
     function calcBip32Seed(phrase, passphrase, path) {
         var seed = mnemonic.toSeed(phrase, passphrase);
         bip32RootKey = Bitcoin.HDNode.fromSeedHex(seed, network);
-        bip32ExtendedKey = bip32RootKey;
-        // Derive the key from the path
-        var pathBits = path.split("/");
-        for (var i=0; i<pathBits.length; i++) {
-            var bit = pathBits[i];
-            var index = parseInt(bit);
-            if (isNaN(index)) {
-                continue;
-            }
-            var hardened = bit[bit.length-1] == "'";
-            if (hardened) {
-                bip32ExtendedKey = bip32ExtendedKey.deriveHardened(index);
-            }
-            else {
-                bip32ExtendedKey = bip32ExtendedKey.derive(index);
-            }
-        }
+        rootKeyChanged(path);
     }
 
     function showValidationError(errorText) {
@@ -320,6 +311,32 @@
         // TODO
         return false;
     }
+    
+    function rootKeyChanged(path){
+        bip32ExtendedKey = bip32RootKey;
+        // Derive the key from the path
+        var pathBits = path.split("/");
+        for (var i=0; i<pathBits.length; i++) {
+            var bit = pathBits[i];
+            var index = parseInt(bit);
+            if (isNaN(index)) {
+                continue;
+            }
+            var hardened = bit[bit.length-1] == "'";
+            if (hardened) {
+                bip32ExtendedKey = bip32ExtendedKey.deriveHardened(index);
+            }
+            else {
+                bip32ExtendedKey = bip32ExtendedKey.derive(index);
+            }
+        }
+    }
+    
+    function updateRootKey(){
+        bip32RootKey = Bitcoin.HDNode.fromBase58(DOM.rootKey.val());
+        rootKeyChanged(derivationPath);
+        displayBip32Info();
+    }
 
     function displayBip32Info() {
         // Display the key
@@ -351,7 +368,12 @@
             setTimeout(function() {
                 var key = bip32ExtendedKey.derive(index);
                 var address = key.getAddress().toString();
-                var privkey = key.privKey.toWIF(network);
+                var privkey;
+                if (key.privKey) {
+                    privkey = key.privKey.toWIF(network);
+                } else {
+                    privkey = null;
+                }
                 addAddressToList(index, address, privkey);
             }, 50)
         }
